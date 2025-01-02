@@ -1,0 +1,17 @@
+# Project exclude paths
+/bagel/target/
+/core/target/
+/examples/target/
+/external/flume/target/
+/external/flume-sink/target/
+/external/kafka/target/
+/external/mqtt/target/
+/external/twitter/target/
+/external/zeromq/target/
+/graphx/target/
+/mllib/target/
+/repl/target/
+/sql/catalyst/target/
+/sql/core/target/
+/sql/hive/target/
+/streaming/target/
