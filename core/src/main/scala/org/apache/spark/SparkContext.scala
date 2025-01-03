@@ -477,6 +477,10 @@ class SparkContext(config: SparkConf) extends Logging {
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
+    //todo 1、hdfs的地址
+  //      2、 InputFormat的类型
+  //      3、Mapper的第一个类型
+  //      4、Mapper的第二类型
   def textFile(path: String, minPartitions: Int = defaultMinPartitions): RDD[String] = {
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
       minPartitions).map(pair => pair._2.toString).setName(path)
@@ -566,8 +570,11 @@ class SparkContext(config: SparkConf) extends Logging {
       minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
+    //todo 1、把hadoop的配置文件保存到广播变量里。
     val confBroadcast = broadcast(new SerializableWritable(hadoopConfiguration))
+    //todo 2、设置路径的方法
     val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
+    //todo 3、new了一个HadoopRDD返回
     new HadoopRDD(
       this,
       confBroadcast,
@@ -1107,6 +1114,7 @@ class SparkContext(config: SparkConf) extends Logging {
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite.shortForm)
     val start = System.nanoTime
+    //todo 提交作业，然后等待结果，成功什么都不做，失败抛出错误
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
       resultHandler, localProperties.get)
     logInfo(

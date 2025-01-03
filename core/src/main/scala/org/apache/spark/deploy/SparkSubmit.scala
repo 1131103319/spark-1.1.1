@@ -71,7 +71,9 @@ object SparkSubmit {
     if (appArgs.verbose) {
       printStream.println(appArgs)
     }
+    //todo 重要
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
+    //todo launch是反射调用mainClass
     launch(childArgs, classpath, sysProps, mainClass, appArgs.verbose)
   }
 
@@ -102,6 +104,7 @@ object SparkSubmit {
 
     // Set the deploy mode; default is client mode
     var deployMode: Int = args.deployMode match {
+      //todo Driver程序的部署模式有两种，client和cluster，默认是client
       case "client" | null => CLIENT
       case "cluster" => CLUSTER
       case _ => printErrorAndExit("Deploy mode must be either client or cluster"); -1
@@ -250,6 +253,7 @@ object SparkSubmit {
 
     // In standalone-cluster mode, use Client as a wrapper around the user class
     if (clusterManager == STANDALONE && deployMode == CLUSTER) {
+      //todo standalone的mainClass是org.apache.spark.deploy.Client
       childMainClass = "org.apache.spark.deploy.Client"
       if (args.supervise) {
         childArgs += "--supervise"
@@ -263,6 +267,7 @@ object SparkSubmit {
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (isYarnCluster) {
+      //todo yarn模式的话mainClass是org.apache.spark.deploy.yarn.Client
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       if (args.primaryResource != SPARK_INTERNAL) {
         childArgs += ("--jar", args.primaryResource)

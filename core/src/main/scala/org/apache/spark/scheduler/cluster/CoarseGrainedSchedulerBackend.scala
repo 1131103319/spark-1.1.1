@@ -113,7 +113,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
             logWarning(msg.format(taskId, state, sender, executorId))
           }
         }
-
+      //todo
       case ReviveOffers =>
         makeOffers()
 
@@ -148,6 +148,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
     // Make fake resource offers on all executors
     def makeOffers() {
+      //todo
       launchTasks(scheduler.resourceOffers(
         executorHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))}))
     }
@@ -180,6 +181,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         }
         else {
           freeCores(task.executorId) -= scheduler.CPUS_PER_TASK
+          //todo 通过executorId找到相应的executorActor，然后发送LaunchTask过去，一个Task占用一个Cpu。
           executorActor(task.executorId) ! LaunchTask(new SerializableBuffer(serializedTask))
         }
       }

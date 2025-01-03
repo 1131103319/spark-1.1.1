@@ -295,6 +295,7 @@ class DAGScheduler(
         visited += r
         // Kind of ugly: need to register RDDs with the cache here since
         // we can't do it in its constructor because # of partitions is unknown
+        //todo         // 在visit函数里面，只有存在ShuffleDependency的，parent才通过getShuffleMapStage计算出来
         for (dep <- r.dependencies) {
           dep match {
             case shufDep: ShuffleDependency[_, _, _] =>
@@ -492,6 +493,7 @@ class DAGScheduler(
 
     assert(partitions.size > 0)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
+    //todo     // 记录作业成功与失败的数据结构，一个作业的Task数量是和分片的数量一致的，Task成功之后调用resultHandler保存结果。
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
     eventProcessActor ! JobSubmitted(
       jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter, properties)
@@ -679,6 +681,8 @@ class DAGScheduler(
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo) {
     // Note that there is a chance that this task is launched after the stage is cancelled.
     // In that case, we wouldn't have the stage anymore in stageIdToStage.
+    //todo 1、检查Task序列化的大小，超过100K就警告。
+    //      2、提交等待的Stage。
     val stageAttemptId = stageIdToStage.get(task.stageId).map(_.latestInfo.attemptId).getOrElse(-1)
     listenerBus.post(SparkListenerTaskStart(task.stageId, stageAttemptId, taskInfo))
     submitWaitingStages()
@@ -723,6 +727,7 @@ class DAGScheduler(
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
+      //todo
       finalStage = newStage(finalRDD, partitions.size, None, jobId, callSite)
     } catch {
       case e: Exception =>
@@ -742,17 +747,21 @@ class DAGScheduler(
         localExecutionEnabled && allowLocal && finalStage.parents.isEmpty && partitions.length == 1
       if (shouldRunLocally) {
         // Compute very short actions like first() or take() with no parent stages locally.
+        //todo         // 很短、没有父stage的本地操作，比如 first() or take() 的操作本地执行.
         listenerBus.post(SparkListenerJobStart(job.jobId, Array[Int](), properties))
         runLocally(job)
       } else {
+        //todo         // collect等操作走的是这个过程，更新相关的关系映射，用监听器监听，然后提交作业
         jobIdToActiveJob(jobId) = job
         activeJobs += job
         finalStage.resultOfJob = Some(job)
         listenerBus.post(SparkListenerJobStart(job.jobId, jobIdToStageIds(jobId).toArray,
           properties))
+        //todo         // 提交stage
         submitStage(finalStage)
       }
     }
+    //todo     // 提交stage
     submitWaitingStages()
   }
 
@@ -766,11 +775,14 @@ class DAGScheduler(
         logDebug("missing: " + missing)
         if (missing == Nil) {
           logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
+          //todo           // 没有父stage，执行这stage的tasks
           submitMissingTasks(stage, jobId.get)
         } else {
+          //todo 　　       // 提交父stage的task，这里是个递归，真正的提交在上面的注释的地方
           for (parent <- missing) {
             submitStage(parent)
           }
+          //todo           // 暂时不能提交的stage，先添加到等待队列
           waitingStages += stage
         }
       }
@@ -780,6 +792,7 @@ class DAGScheduler(
   }
 
   /** Called when stage's parents are available and we can now do its task. */
+
   private def submitMissingTasks(stage: Stage, jobId: Int) {
     logDebug("submitMissingTasks(" + stage + ")")
     // Get our pending tasks and remember them in our pendingTasks entry
@@ -788,8 +801,10 @@ class DAGScheduler(
     // First figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = {
       if (stage.isShuffleMap) {
+        //todo       // 这是shuffle stage的情况
         (0 until stage.numPartitions).filter(id => stage.outputLocs(id) == Nil)
       } else {
+        //todo       // 这是final stage的情况
         val job = stage.resultOfJob.get
         (0 until job.numPartitions).filter(id => !job.finished(id))
       }
@@ -838,7 +853,8 @@ class DAGScheduler(
         runningStages -= stage
         return
     }
-
+    //todo  //todo Task也是有两类的，一种是ShuffleMapTask，一种是ResultTask，我们需要注意这两种Task的runTask方法。
+    //  //    最后Task是通过taskScheduler.submitTasks来提交的。
     val tasks: Seq[Task[_]] = if (stage.isShuffleMap) {
       partitionsToCompute.map { id =>
         val locs = getPreferredLocs(stage.rdd, id)
@@ -1377,7 +1393,7 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
 
     case ExecutorLost(execId) =>
       dagScheduler.handleExecutorLost(execId)
-
+    //todo 开始执行任务
     case BeginEvent(task, taskInfo) =>
       dagScheduler.handleBeginEvent(task, taskInfo)
 

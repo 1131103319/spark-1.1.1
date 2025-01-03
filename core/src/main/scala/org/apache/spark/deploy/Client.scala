@@ -39,8 +39,10 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   val timeout = AkkaUtils.askTimeout(conf)
 
   override def preStart() = {
+    //todo 这里需要把master的地址转换成akka的地址，然后通过这个akka地址获得指定的actor
+    // 它的格式是"akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
     masterActor = context.actorSelection(Master.toAkkaUrl(driverArgs.master))
-
+    //todo     // 自身订阅远程生命周期的事件
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
     println(s"Sending ${driverArgs.cmd} command to ${driverArgs.master}")
@@ -76,7 +78,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
           driverArgs.cores,
           driverArgs.supervise,
           command)
-
+        //todo // 向master发送提交Driver的请求，把driverDescription传过去，RequestSubmitDriver前面说过了，是个case class
         masterActor ! RequestSubmitDriver(driverDescription)
 
       case "kill" =>
@@ -156,12 +158,12 @@ object Client {
     conf.set("spark.akka.askTimeout", "10")
     conf.set("akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
-
+    //todo //创建一个ActorSystem
     val (actorSystem, _) = AkkaUtils.createActorSystem(
       "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
-
+    //todo //执行ClientActor的preStart方法和receive方法,这里其实生成了client代理对象
     actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
-
+    //todo //等待运行结束
     actorSystem.awaitTermination()
   }
 }

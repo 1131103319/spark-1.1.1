@@ -343,26 +343,28 @@ private[spark] class TaskSetManager(
    *
    * @return An option containing (task index within the task set, locality, is speculative?)
    */
+    //todo Spark对运行时间还是很注重的，等待的时间越长，它就可能越饥不择食，从PROCESS_LOCAL一直让步到ANY，最后的最后，推测执行都用到了
   private def findTask(execId: String, host: String, maxLocality: TaskLocality.Value)
     : Option[(Int, TaskLocality.Value, Boolean)] =
   {
+    //todo 　　 // 同一个Executor，通过execId来查找相应的等待的task
     for (index <- findTaskFromList(execId, getPendingTasksForExecutor(execId))) {
       return Some((index, TaskLocality.PROCESS_LOCAL, false))
     }
-
+    //todo 　　 // 通过主机名找到相应的Task,不过比之前的多了一步判断
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NODE_LOCAL)) {
       for (index <- findTaskFromList(execId, getPendingTasksForHost(host))) {
         return Some((index, TaskLocality.NODE_LOCAL, false))
       }
     }
-
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NO_PREF)) {
       // Look for noPref tasks after NODE_LOCAL for minimize cross-rack traffic
+      //todo 　　 // 查找那些preferredLocations为空的，不指定在哪里执行的Task来执行
       for (index <- findTaskFromList(execId, pendingTasksWithNoPrefs)) {
         return Some((index, TaskLocality.PROCESS_LOCAL, false))
       }
     }
-
+    //todo 　　// 通过Rack的名称查找Task
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.RACK_LOCAL)) {
       for {
         rack <- sched.getRackForHost(host)
@@ -379,6 +381,7 @@ private[spark] class TaskSetManager(
     }
 
     // find a speculative task if all others tasks have been scheduled
+    //todo     // 最后没办法了，拖的时间太长了，只能启动推测执行了
     findSpeculativeTask(execId, host, maxLocality).map {
       case (taskIndex, allowedLocality) => (taskIndex, allowedLocality, true)}
   }
@@ -452,7 +455,7 @@ private[spark] class TaskSetManager(
           val taskName = s"task ${info.id} in stage ${taskSet.id}"
           logInfo("Starting %s (TID %d, %s, %s, %d bytes)".format(
               taskName, taskId, host, taskLocality, serializedTask.limit))
-
+          //todo 通知dagScheduler任务开始
           sched.dagScheduler.taskStarted(task, info)
           return Some(new TaskDescription(taskId, execId, taskName, index, serializedTask))
         }
@@ -477,6 +480,7 @@ private[spark] class TaskSetManager(
     {
       // Jump to the next locality level, and remove our waiting time for the current one since
       // we don't want to count it again on the next one
+      //todo       // 成立条件是当前时间-上次发布任务的时间 > 当前本地性级别的，条件成立就跳到下一个级别
       lastLaunchTime += localityWaits(currentLocalityIndex)
       currentLocalityIndex += 1
     }

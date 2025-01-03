@@ -160,6 +160,8 @@ private[spark] class TaskSchedulerImpl(
     this.synchronized {
       val manager = new TaskSetManager(this, taskSet, maxTaskFailures)
       activeTaskSets(taskSet.id) = manager
+      //todo 调度器有两种模式，FIFO和FAIR，默认是FIFO, 可以通过spark.scheduler.mode来设置，
+      // schedulableBuilder也有相应的两种FIFOSchedulableBuilder和FairSchedulableBuilder
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
       if (!isLocal && !hasReceivedTask) {
@@ -215,12 +217,16 @@ private[spark] class TaskSchedulerImpl(
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
    */
+    //todo 1、从Workers里面随机抽出一些来执行任务。
+  //    2、通过TaskSetManager找出和Worker在一起的Task，最后编译打包成TaskDescription返回。
+  //    3、将Worker-->Array[TaskDescription]的映射关系返回。
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
     SparkEnv.set(sc.env)
 
     // Mark each slave as alive and remember its hostname
     // Also track if new executor is added
     var newExecAvail = false
+    //todo     // 遍历worker提供的资源，更新executor相关的映射
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
       if (!executorsByHost.contains(o.host)) {
@@ -234,8 +240,10 @@ private[spark] class TaskSchedulerImpl(
     }
 
     // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
+    //todo     // 从worker当中随机选出一些来，防止任务都堆在一个机器上
     val shuffledOffers = Random.shuffle(offers)
     // Build a list of tasks to assign to each worker.
+    //todo     // worker的task列表
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
@@ -250,6 +258,7 @@ private[spark] class TaskSchedulerImpl(
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
+    //todo     // 随机遍历抽出来的worker，通过TaskSetManager的resourceOffer，把本地性最高的Task分给Worker
     var launchedTask = false
     for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
       do {
@@ -258,6 +267,7 @@ private[spark] class TaskSchedulerImpl(
           val execId = shuffledOffers(i).executorId
           val host = shuffledOffers(i).host
           if (availableCpus(i) >= CPUS_PER_TASK) {
+            //todo
             for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
               tasks(i) += task
               val tid = task.taskId

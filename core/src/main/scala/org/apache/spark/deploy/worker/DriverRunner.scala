@@ -85,6 +85,7 @@ private[spark] class DriverRunner(
             driverDesc.command.javaOpts)
           val command = CommandUtils.buildCommandSeq(newCommand, driverDesc.mem,
             sparkHome.getAbsolutePath)
+          //todo
           launchDriver(command, driverDesc.command.environment, driverDir, driverDesc.supervise)
         }
         catch {
@@ -104,7 +105,8 @@ private[spark] class DriverRunner(
           }
 
         finalState = Some(state)
-
+        //todo worker ！DriverStateChanged通知worker，
+        // worker 再通过master ! DriverStateChanged通知master，释放掉worker的cpu和内存
         worker ! DriverStateChanged(driverId, state, finalException)
       }
     }.start()

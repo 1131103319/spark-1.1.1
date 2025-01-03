@@ -196,6 +196,7 @@ class HadoopRDD[K, V](
     if (inputFormat.isInstanceOf[Configurable]) {
       inputFormat.asInstanceOf[Configurable].setConf(jobConf)
     }
+    //todo inputFormat自带的getSplits方法来计算分片，然后把分片HadoopPartition包装到到array里面返回。
     val inputSplits = inputFormat.getSplits(jobConf, minPartitions)
     val array = new Array[Partition](inputSplits.size)
     for (i <- 0 until inputSplits.size) {
@@ -206,7 +207,7 @@ class HadoopRDD[K, V](
 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new NextIterator[(K, V)] {
-
+      //todo // 转换成HadoopPartition
       val split = theSplit.asInstanceOf[HadoopPartition]
       logInfo("Input split: " + split.inputSplit)
       var reader: RecordReader[K, V] = null
@@ -214,10 +215,12 @@ class HadoopRDD[K, V](
       val inputFormat = getInputFormat(jobConf)
       HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(createTime),
         context.stageId, theSplit.index, context.attemptId.toInt, jobConf)
+      //todo       // 通过Inputform的getRecordReader来创建这个InputSpit的Reader
       reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
       // Register an on-task-completion callback to close the input stream.
       context.addTaskCompletionListener{ context => closeIfNeeded() }
+      //todo       // 调用Reader的next方法
       val key: K = reader.createKey()
       val value: V = reader.createValue()
 
@@ -266,6 +269,7 @@ class HadoopRDD[K, V](
   override def getPreferredLocations(split: Partition): Seq[String] = {
     // TODO: Filtering out "localhost" in case of file:// URLs
     val hadoopSplit = split.asInstanceOf[HadoopPartition]
+    //todo 直接调用InputSplit的getLocations方法获得所在的位置
     hadoopSplit.inputSplit.value.getLocations.filter(_ != "localhost")
   }
 

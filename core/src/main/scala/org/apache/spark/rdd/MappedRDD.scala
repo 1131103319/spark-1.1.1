@@ -24,9 +24,9 @@ import org.apache.spark.{Partition, TaskContext}
 private[spark]
 class MappedRDD[U: ClassTag, T: ClassTag](prev: RDD[T], f: T => U)
   extends RDD[U](prev) {
-
+  //todo 1、getPartitions直接沿用了父RDD的分片信息
   override def getPartitions: Array[Partition] = firstParent[T].partitions
-
+  //todo 2、compute函数是在父RDD遍历每一行数据时套一个匿名函数f进行处理
   override def compute(split: Partition, context: TaskContext) =
     firstParent[T].iterator(split, context).map(f)
 }

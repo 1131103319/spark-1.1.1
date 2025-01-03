@@ -301,6 +301,7 @@ private[spark] class Worker(
       logInfo(s"Asked to launch driver $driverId")
       val driver = new DriverRunner(driverId, workDir, sparkHome, driverDesc, self, akkaUrl)
       drivers(driverId) = driver
+      //todo
       driver.start()
 
       coresUsed += driverDesc.cores
@@ -330,9 +331,11 @@ private[spark] class Worker(
         case _ =>
           logDebug(s"Driver $driverId changed state to $state")
       }
+      //todo 通知master
       masterLock.synchronized {
         master ! DriverStateChanged(driverId, state, exception)
       }
+      //todo 释放资源
       val driver = drivers.remove(driverId).get
       finishedDrivers(driverId) = driver
       memoryUsed -= driver.driverDesc.mem

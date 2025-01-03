@@ -189,7 +189,8 @@ private[spark] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
     }
-
+    //todo   //todo 每个Worker启动之后，会自动去请求Master去注册自己
+    //  // 它需要上报自己的内存、Cpu、地址、端口等信息，注册成功之后返回RegisteredWorker信息给它，说已经注册成功了
     case RegisterWorker(id, workerHost, workerPort, cores, memory, workerUiPort, publicAddress) =>
     {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
@@ -225,11 +226,12 @@ private[spark] class Master(
         persistenceEngine.addDriver(driver)
         waitingDrivers += driver
         drivers.add(driver)
+        //todo         // 调度
         schedule()
 
         // TODO: It might be good to instead have the submission client poll the master to determine
         //       the current status of the driver. For now it's simply "fire and forget".
-
+        //todo          // 告诉client，提交成功了，把driver.id告诉它
         sender ! SubmitDriverResponse(true, Some(driver.id),
           s"Driver successfully submitted as ${driver.id}")
       }
@@ -482,14 +484,18 @@ private[spark] class Master(
    * Schedule the currently available resources among waiting apps. This method will be called
    * every time a new app joins or resource availability changes.
    */
+    //todo 它的调度器是这样的，先调度Driver程序，然后再调度App，调度App的方式是从各个worker的里面和App进行匹配，看需要分配多少个cpu。
   private def schedule() {
     if (state != RecoveryState.ALIVE) { return }
 
     // First schedule drivers, they take strict precedence over applications
+    //todo     // 首先调度Driver程序，从workers里面随机抽一些出来
     val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
     for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
       for (driver <- List(waitingDrivers: _*)) { // iterate over a copy of waitingDrivers
+        //todo         // 判断内存和cpu够不够，够的就执行了哈
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
+          //todo 给worker发送了一个LaunchDriver的消息
           launchDriver(worker, driver)
           waitingDrivers -= driver
         }
@@ -498,26 +504,36 @@ private[spark] class Master(
 
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
+    //todo     // 这里是按照先进先出的，spreadOutApps是由spark.deploy.spreadOut参数来决定的，默认是true
     if (spreadOutApps) {
       // Try to spread out each app among all the nodes, until it has all its cores
+      //todo       // 遍历一下app
       for (app <- waitingApps if app.coresLeft > 0) {
+        //todo  // canUse里面判断了worker的内存是否够用，并且该worker是否已经包含了该app的Executor
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(canUse(app, _)).sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
+        //todo         // 记录每个节点的核心数 如果应用程序剩余的核心数（app.coresLeft）小于
+        // 可用工作节点的总核心数（usableWorkers.map(_.coresFree).sum），那么就分配 app.coresLeft 核心。
         var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
         var pos = 0
+        //todo 遍历直到分配结束
         while (toAssign > 0) {
+          //todo           // 从0开始遍历可用的work，如果可用的cpu减去已经分配的>0,就可以分配给它
           if (usableWorkers(pos).coresFree - assigned(pos) > 0) {
             toAssign -= 1
+            //todo             // 这个位置的work的可分配的cpu数+1
             assigned(pos) += 1
           }
           pos = (pos + 1) % numUsable
         }
         // Now that we've decided how many cores to give on each node, let's actually give them
+        //todo         // 给刚才标记的worker分配任务
         for (pos <- 0 until numUsable) {
           if (assigned(pos) > 0) {
             val exec = app.addExecutor(usableWorkers(pos), assigned(pos))
+            //todo 除了给worker发送LaunchExecutor指令外，还需要给driver发送ExecutorAdded的消息，说你的任务已经有人干了。
             launchExecutor(usableWorkers(pos), exec)
             app.state = ApplicationState.RUNNING
           }
@@ -525,8 +541,10 @@ private[spark] class Master(
       }
     } else {
       // Pack each app into as few nodes as possible until we've assigned all its cores
+      //todo       // 这种方式和上面的方式的区别是，这种方式尽可能用少量的节点来完成这个任务
       for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
         for (app <- waitingApps if app.coresLeft > 0) {
+          //todo           // 判断条件是worker的内存比app需要的内存多
           if (canUse(app, worker)) {
             val coresToUse = math.min(worker.coresFree, app.coresLeft)
             if (coresToUse > 0) {
@@ -815,6 +833,7 @@ private[spark] object Master extends Logging {
     val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,
       securityManager = securityMgr)
+    //todo 构建master的代理对象
     val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort,
       securityMgr), actorName)
     val timeout = AkkaUtils.askTimeout(conf)

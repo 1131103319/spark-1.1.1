@@ -86,6 +86,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     }
     val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
     if (self.partitioner == Some(partitioner)) {
+      //todo       // 一般的RDD的partitioner是None，这个条件不成立，即使成立只需要对这个数据做一次按key合并value的操作即可
       self.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
       }, preservesPartitioning = true)
@@ -256,6 +257,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce.
    */
+    //todo
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = {
     combineByKey[V]((v: V) => v, func, func, partitioner)
   }

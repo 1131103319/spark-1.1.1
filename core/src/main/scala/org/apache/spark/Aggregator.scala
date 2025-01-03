@@ -42,18 +42,22 @@ case class Aggregator[K, V, C] (
 
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]],
                          context: TaskContext): Iterator[(K, C)] = {
+    //todo     // 是否使用外部排序，是由参数spark.shuffle.spill，默认是true
     if (!externalSorting) {
       val combiners = new AppendOnlyMap[K,C]
       var kv: Product2[K, V] = null
       val update = (hadValue: Boolean, oldValue: C) => {
         if (hadValue) mergeValue(oldValue, kv._2) else createCombiner(kv._2)
       }
+      //todo // 用map来去重，用update方法来更新值，如果没值的时候，返回值，如果有值的时候，通过mergeValue方法来合并
+      //      // mergeValue方法就是我们在reduceByKey里面写的那个匿名函数，在这里就是（_ + _）
       while (iter.hasNext) {
         kv = iter.next()
         combiners.changeValue(kv._1, update)
       }
       combiners.iterator
     } else {
+      //todo       // 用了一个外部排序的map来去重，就不停的往里面插入值即可，基本原理和上面的差不多，区别在于需要外部排序
       val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
       combiners.insertAll(iter)
       // Update task metrics if context is not null
