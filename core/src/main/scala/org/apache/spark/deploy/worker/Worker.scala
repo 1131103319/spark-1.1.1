@@ -231,13 +231,14 @@ private[spark] class Worker(
         logError("Worker registration failed: " + message)
         System.exit(1)
       }
-
+    //todo 接收调度executor
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
       } else {
         try {
           logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
+          //todo 内部是执行了appDesc内部的那个命令，启动了CoarseGrainedExecutorBackend
           val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
             self, workerId, host, sparkHome, workDir, akkaUrl, conf, ExecutorState.LOADING)
           executors(appId + "/" + execId) = manager

@@ -278,17 +278,23 @@ private[spark] class Master(
           sender ! DriverStatusResponse(found = false, None, None, None, None)
       }
     }
-
+    //todo 注册registerApplication
     case RegisterApplication(description) => {
       if (state == RecoveryState.STANDBY) {
         // ignore, don't send response
       } else {
         logInfo("Registering app " + description.name)
+        //todo 1、createApplication为这个app构建一个描述App数据结构的ApplicationInfo。
         val app = createApplication(description, sender)
+        //todo 2、注册该Application，更新相应的映射关系，添加到等待队列里面。
         registerApplication(app)
         logInfo("Registered app " + description.name + " with ID " + app.id)
+        //todo 3、用persistenceEngine持久化Application信息，默认是不保存的，另外还有两种方式，保存在文件或者Zookeeper当中。
         persistenceEngine.addApplication(app)
+        //todo 4、通过发送方注册成功。
         sender ! RegisteredApplication(app.id, masterUrl)
+        //todo 5、开始作业调度。
+        // Application一旦获得资源，Master会发送launchExecutor指令给Worker去启动Executor，进到Worker里面搜索LaunchExecutor。
         schedule()
       }
     }

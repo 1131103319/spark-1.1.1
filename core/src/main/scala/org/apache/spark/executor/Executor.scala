@@ -104,9 +104,10 @@ private[spark] class Executor(
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
   startDriverHeartbeater()
-
+  //todo
   def launchTask(
       context: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer) {
+    //todo
     val tr = new TaskRunner(context, taskId, taskName, serializedTask)
     runningTasks.put(taskId, tr)
     threadPool.execute(tr)
@@ -140,7 +141,7 @@ private[spark] class Executor(
         task.kill(interruptThread)
       }
     }
-
+    //todo
     override def run() {
       val startTime = System.currentTimeMillis()
       SparkEnv.set(env)
@@ -151,7 +152,7 @@ private[spark] class Executor(
       var taskStart: Long = 0
       def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
       val startGCTime = gcTime
-
+      //todo         // 反序列化Task
       try {
         SparkEnv.set(env)
         Accumulators.clear()
@@ -168,12 +169,13 @@ private[spark] class Executor(
           // for the task.
           throw new TaskKilledException
         }
-
+        //todo 　　     // 命令为尝试运行，和hadoop的mapreduce作业是一致的
         attemptedTask = Some(task)
         logDebug("Task " + taskId + "'s epoch is " + task.epoch)
         env.mapOutputTracker.updateEpoch(task.epoch)
 
         // Run the actual task and measure its runtime.
+        //todo         // 运行Task, 具体可以去看之前让大家关注的ResultTask和ShuffleMapTask
         taskStart = System.currentTimeMillis()
         val value = task.run(taskId.toInt)
         val taskFinish = System.currentTimeMillis()
@@ -182,12 +184,12 @@ private[spark] class Executor(
         if (task.killed) {
           throw new TaskKilledException
         }
-
+        //todo 　　　　 // 对结果进行序列化
         val resultSer = SparkEnv.get.serializer.newInstance()
         val beforeSerialization = System.currentTimeMillis()
         val valueBytes = resultSer.serialize(value)
         val afterSerialization = System.currentTimeMillis()
-
+        //todo 　　　　　// 更新任务的相关监控信息，会反映到监控页面上的
         for (m <- task.metrics) {
           m.executorDeserializeTime = taskStart - startTime
           m.executorRunTime = taskFinish - taskStart
@@ -196,12 +198,14 @@ private[spark] class Executor(
         }
 
         val accumUpdates = Accumulators.values
-
+        //todo 　　　　 // 对结果进行再包装，包装完再进行序列化
         val directResult = new DirectTaskResult(valueBytes, accumUpdates, task.metrics.orNull)
         val serializedDirectResult = ser.serialize(directResult)
         val resultSize = serializedDirectResult.limit
 
         // directSend = sending directly back to the driver
+        //todo         // 如果中间结果的大小超过了spark.akka.frameSize（默认是10M）的大小，
+        // 就要提升序列化级别了，超过内存的部分要保存到硬盘的
         val (serializedResult, directSend) = {
           if (resultSize >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
             val blockId = TaskResultBlockId(taskId)
@@ -212,7 +216,7 @@ private[spark] class Executor(
             (serializedDirectResult, true)
           }
         }
-
+        //todo 　　　　 // 返回结果
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
         if (directSend) {
@@ -254,6 +258,7 @@ private[spark] class Executor(
           }
         }
       } finally {
+        //todo         // 清理为ResultTask注册的shuffle内存，最后把task从正在运行的列表当中删除
         // Release memory used by this thread for shuffles
         env.shuffleMemoryManager.releaseMemoryForThisThread()
         // Release memory used by this thread for unrolling blocks
